@@ -2,8 +2,10 @@ module diff
 
 go 1.25.1
 
+replace github.com/dweymouth/fyne-tooltip => ./third_party/fyne-tooltip
+
 require (
-	fyne.io/fyne/v2 v2.7.1
+	fyne.io/fyne/v2 v2.7.3
 	github.com/dweymouth/fyne-tooltip v0.4.0
 	github.com/sergi/go-diff v1.3.1
 )

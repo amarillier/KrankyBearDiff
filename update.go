@@ -11,20 +11,26 @@ import (
 
 var updateWindow fyne.Window
 
-func showUpdateDialog(a fyne.App, message string, updateAvailable bool) {
+func showUpdateDialog(a fyne.App, message string, updateAvailable, localAhead bool) {
 	if updateWindow != nil && updateWindow.Content().Visible() {
 		updateWindow.Show()
 		updateWindow.RequestFocus()
 		return
 	}
 
-	updateWindow = a.NewWindow(appName + " - Update Check")
-	updateWindow.SetIcon(resourceKrankyBearHackerPng)
+	branding := resourceKrankyBearHackerPng
+	if localAhead {
+		branding = resourceKrankyBearNerdPng
+	}
 
-	icon := newBrandingDialogImage(resourceKrankyBearHackerPng)
+	updateWindow = a.NewWindow(appName + " - Update Check")
+	updateWindow.SetIcon(branding)
+
+	icon := newBrandingDialogImage(branding)
 
 	messageLabel := widget.NewLabel(message)
-	messageLabel.Wrapping = fyne.TextWrapWord
+	// Wrapped labels report huge MinSize before layout; window Resize is Max'd with it.
+	messageLabel.Wrapping = fyne.TextWrapOff
 	messageLabel.Alignment = fyne.TextAlignLeading
 
 	var textColumn *fyne.Container
@@ -47,8 +53,8 @@ func showUpdateDialog(a fyne.App, message string, updateAvailable bool) {
 		textColumn = container.NewVBox(messageLabel)
 	}
 
-	// Border gives the text column the remaining width; HBox + wrapped labels
-	// collapses to ~one character wide (min width) and stacks one char per line.
+	// Border gives the text column the remaining width for display; MinSize for
+	// wrapped labels is still wrong before layout, so the label uses TextWrapOff.
 	mainArea := container.NewBorder(
 		nil, nil,
 		container.NewPadded(icon), nil,

@@ -44,6 +44,71 @@ func nextLeftInsertIndex(rows []DiffRow, from int) int {
 	return -1
 }
 
+// canApplyLeftToRightAtRow reports whether applyLeftToRightAtRow can run for this row
+// (equal line pair, left-only delete row, or right-only insert row).
+func canApplyLeftToRightAtRow(m *DiffModel, row int) bool {
+	if m == nil || row < 0 || row >= len(m.Rows) {
+		return false
+	}
+	dr := m.Rows[row]
+	switch {
+	case dr.LeftTag == LineEqual && dr.RightTag == LineEqual:
+		return true
+	case dr.LeftTag == LineRemoved && dr.RightTag == LinePadding:
+		return true
+	case dr.LeftTag == LinePadding && dr.RightTag == LineAdded:
+		return true
+	default:
+		return false
+	}
+}
+
+// canApplyRightToLeftAtRow reports whether applyRightToLeftAtRow can run for this row.
+func canApplyRightToLeftAtRow(m *DiffModel, row int) bool {
+	if m == nil || row < 0 || row >= len(m.Rows) {
+		return false
+	}
+	dr := m.Rows[row]
+	switch {
+	case dr.LeftTag == LineEqual && dr.RightTag == LineEqual:
+		return true
+	case dr.LeftTag == LinePadding && dr.RightTag == LineAdded:
+		return true
+	case dr.LeftTag == LineRemoved && dr.RightTag == LinePadding:
+		return true
+	default:
+		return false
+	}
+}
+
+// applyLeftToRightMenuLabel describes what applyLeftToRightAtRow does on this row.
+func applyLeftToRightMenuLabel(dr DiffRow) string {
+	switch {
+	case dr.LeftTag == LineEqual && dr.RightTag == LineEqual:
+		return "Replace right line with left"
+	case dr.LeftTag == LineRemoved && dr.RightTag == LinePadding:
+		return "Insert left line into right"
+	case dr.LeftTag == LinePadding && dr.RightTag == LineAdded:
+		return "Remove line from right"
+	default:
+		return "Apply left to right"
+	}
+}
+
+// applyRightToLeftMenuLabel describes what applyRightToLeftAtRow does on this row.
+func applyRightToLeftMenuLabel(dr DiffRow) string {
+	switch {
+	case dr.LeftTag == LineEqual && dr.RightTag == LineEqual:
+		return "Replace left line with right"
+	case dr.LeftTag == LinePadding && dr.RightTag == LineAdded:
+		return "Insert right line into left"
+	case dr.LeftTag == LineRemoved && dr.RightTag == LinePadding:
+		return "Remove line from left"
+	default:
+		return "Apply right to left"
+	}
+}
+
 // applyLeftToRightAtRow updates a copy of rightLines so the aligned row matches the left file.
 func applyLeftToRightAtRow(m *DiffModel, row int, leftLines, rightLines []string) ([]string, bool) {
 	if m == nil || row < 0 || row >= len(m.Rows) {

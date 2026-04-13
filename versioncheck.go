@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -18,13 +19,93 @@ type ghRelease struct {
 	Name    string `json:"name"`
 }
 
+// versionOrder compares two semver-like tags (optional leading "v", numeric dot-separated core,
+// optional "-prerelease"). Returns -1 if a < b, 0 if equal, 1 if a > b.
+func versionOrder(a, b string) int {
+	a = strings.TrimPrefix(strings.TrimSpace(a), "v")
+	b = strings.TrimPrefix(strings.TrimSpace(b), "v")
+	coreA, preA := splitCorePre(a)
+	coreB, preB := splitCorePre(b)
+	if c := compareNumericCore(coreA, coreB); c != 0 {
+		return c
+	}
+	return comparePrerelease(preA, preB)
+}
+
+func splitCorePre(s string) (core, pre string) {
+	s = strings.TrimSpace(s)
+	if i := strings.IndexByte(s, '-'); i >= 0 {
+		return strings.TrimSpace(s[:i]), strings.TrimSpace(s[i+1:])
+	}
+	return s, ""
+}
+
+func compareNumericCore(a, b string) int {
+	pa := strings.Split(a, ".")
+	pb := strings.Split(b, ".")
+	n := len(pa)
+	if len(pb) > n {
+		n = len(pb)
+	}
+	for i := 0; i < n; i++ {
+		var na, nb int
+		var okA, okB = true, true
+		if i < len(pa) {
+			na, okA = parseIntPrefix(pa[i])
+		}
+		if i < len(pb) {
+			nb, okB = parseIntPrefix(pb[i])
+		}
+		if !okA || !okB {
+			return strings.Compare(a, b)
+		}
+		if na < nb {
+			return -1
+		}
+		if na > nb {
+			return 1
+		}
+	}
+	return 0
+}
+
+func parseIntPrefix(s string) (int, bool) {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return 0, true
+	}
+	end := 0
+	for end < len(s) && s[end] >= '0' && s[end] <= '9' {
+		end++
+	}
+	if end == 0 {
+		return 0, false
+	}
+	v, err := strconv.Atoi(s[:end])
+	return v, err == nil
+}
+
+// Semver: a release without prerelease is newer than same core with prerelease.
+func comparePrerelease(a, b string) int {
+	if a == b {
+		return 0
+	}
+	if a == "" {
+		return 1
+	}
+	if b == "" {
+		return -1
+	}
+	return strings.Compare(a, b)
+}
+
 // checkForUpdates queries GitHub and opens the update dialog on the UI thread.
 func checkForUpdates(a fyne.App) {
 	go func() {
 		client := &http.Client{Timeout: 12 * time.Second}
 		req, err := http.NewRequest(http.MethodGet, githubReleasesAPI, nil)
 		if err != nil {
-			fyne.Do(func() { showUpdateDialog(a, "Could not check for updates.", false) })
+			fyne.Do(func() { showUpdateDialog(a, "Could not check for updates.", false, false) })
 			return
 		}
 		req.Header.Set("Accept", "application/vnd.github+json")
@@ -33,7 +114,7 @@ func checkForUpdates(a fyne.App) {
 		resp, err := client.Do(req)
 		if err != nil {
 			fyne.Do(func() {
-				showUpdateDialog(a, "Could not reach GitHub to check for updates.\n\n"+err.Error(), false)
+				showUpdateDialog(a, "Could not reach GitHub to check for updates.\n\n"+err.Error(), false, false)
 			})
 			return
 		}
@@ -42,28 +123,35 @@ func checkForUpdates(a fyne.App) {
 		body, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
 		if resp.StatusCode != http.StatusOK {
 			fyne.Do(func() {
-				showUpdateDialog(a, fmt.Sprintf("Update check failed (%s).", resp.Status), false)
+				showUpdateDialog(a, fmt.Sprintf("Update check failed (%s).", resp.Status), false, false)
 			})
 			return
 		}
 
 		var rel ghRelease
 		if err := json.Unmarshal(body, &rel); err != nil {
-			fyne.Do(func() { showUpdateDialog(a, "Could not read release information.", false) })
+			fyne.Do(func() { showUpdateDialog(a, "Could not read release information.", false, false) })
 			return
 		}
 
-		remote := strings.TrimPrefix(strings.TrimSpace(rel.TagName), "v")
+		remote := strings.TrimSpace(rel.TagName)
 		local := strings.TrimSpace(appVersion)
-		available := remote != "" && remote != local
-
 		var msg string
-		if available {
+		var available bool
+		var localAhead bool
+		switch {
+		case remote == "":
+			msg = fmt.Sprintf("Could not determine the latest release tag.\n\nYour version: %s", local)
+		case versionOrder(local, remote) < 0:
+			available = true
 			msg = fmt.Sprintf("A newer release is available.\n\nYou have: %s\nLatest: %s (%s).", local, rel.TagName, rel.Name)
-		} else {
-			msg = fmt.Sprintf("You are up to date.\n\nCurrent version: %s\nLatest release: %s", local, rel.TagName)
+		case versionOrder(local, remote) > 0:
+			localAhead = true
+			msg = fmt.Sprintf("Your build is newer than the latest release on GitHub\n(development or unpublished build).\n\nYour version: %s\nLatest release: %s (%s)", local, rel.TagName, rel.Name)
+		default:
+			msg = fmt.Sprintf("You are up to date.\n\nCurrent version: %s\nLatest release: %s (%s)", local, rel.TagName, rel.Name)
 		}
 
-		fyne.Do(func() { showUpdateDialog(a, msg, available) })
+		fyne.Do(func() { showUpdateDialog(a, msg, available, localAhead) })
 	}()
 }

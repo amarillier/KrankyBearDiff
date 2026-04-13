@@ -13,6 +13,7 @@ import (
 	"fyne.io/fyne/v2/canvas"
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/dialog"
+	"fyne.io/fyne/v2/driver/desktop"
 	"fyne.io/fyne/v2/layout"
 	"fyne.io/fyne/v2/storage"
 	"fyne.io/fyne/v2/theme"
@@ -67,7 +68,7 @@ func (r *diffLineRow) Tapped(ev *fyne.PointEvent) {
 
 func (r *diffLineRow) TappedSecondary(ev *fyne.PointEvent) {
 	if r.view != nil {
-		r.view.showMergeMenu(r.rowID, ev.AbsolutePosition)
+		r.view.showMergeMenu(r.side, r.rowID, ev.AbsolutePosition)
 	}
 }
 
@@ -98,16 +99,71 @@ type diffView struct {
 	showLineNumbers bool
 	showWhitespace  bool
 
+	hasDiffSelection bool
+	selectedDiffRow  widget.ListItemID
+
 	leftDirty  bool
 	rightDirty bool
 
 	btnSaveLeft, btnSaveRight, btnSaveBoth *ttwidget.Button
+	btnUndo, btnRedo                       *ttwidget.Button
+	btnSwapSides                           *ttwidget.Button
+	btnSyncScroll                          *ttwidget.Button
 	btnLineNums, btnWhitespace             *ttwidget.Button
+
+	undoStack, redoStack []editSnapshot
+
+	// flyoutPop is a *widget.PopUp menu (merge row, recent files) so fyne-tooltip can attach to Overlays().Top().
+	flyoutPop *widget.PopUp
+
+	paneSearchEntry [2]*widget.Entry
+	paneSearchRegex [2]*ttwidget.Check
+	paneSearchCase  [2]*ttwidget.Check
+}
+
+func (v *diffView) showFlyoutMenu(menu *fyne.Menu, pos fyne.Position) {
+	if v.win == nil {
+		return
+	}
+	if v.flyoutPop != nil {
+		fynetooltip.DestroyPopUpToolTipLayer(v.flyoutPop)
+		v.flyoutPop = nil
+	}
+	menuW := widget.NewMenu(menu)
+	menuW.Resize(menuW.MinSize())
+	pop := widget.NewPopUp(menuW, v.win.Canvas())
+	v.flyoutPop = pop
+	fynetooltip.AddPopUpToolTipLayer(pop)
+	menuW.OnDismiss = func() {
+		fynetooltip.DestroyPopUpToolTipLayer(pop)
+		if v.flyoutPop == pop {
+			v.flyoutPop = nil
+		}
+		pop.Hide()
+	}
+	pop.ShowAtPosition(pos)
 }
 
 func rgbaAlpha(c color.Color, alpha uint8) color.NRGBA {
 	r16, g16, b16, _ := c.RGBA()
 	return color.NRGBA{R: uint8(r16 >> 8), G: uint8(g16 >> 8), B: uint8(b16 >> 8), A: alpha}
+}
+
+func colorToNRGBA(c color.Color) color.NRGBA {
+	r16, g16, b16, a16 := c.RGBA()
+	return color.NRGBA{R: uint8(r16 >> 8), G: uint8(g16 >> 8), B: uint8(b16 >> 8), A: uint8(a16 >> 8)}
+}
+
+// blendToward mixes b into a (t=0 → a, t=1 → b).
+func blendToward(a, b color.Color, t float32) color.NRGBA {
+	x := colorToNRGBA(a)
+	y := colorToNRGBA(b)
+	return color.NRGBA{
+		R: uint8(float32(x.R)*(1-t) + float32(y.R)*t),
+		G: uint8(float32(x.G)*(1-t) + float32(y.G)*t),
+		B: uint8(float32(x.B)*(1-t) + float32(y.B)*t),
+		A: uint8(fyne.Max(float32(x.A), float32(y.A))),
+	}
 }
 
 func (v *diffView) tagBackground(tag LineTag) color.Color {
@@ -125,6 +181,7 @@ func (v *diffView) tagBackground(tag LineTag) color.Color {
 
 func (v *diffView) recompute() {
 	v.model = BuildDiffModel(v.leftT, v.rightT)
+	v.hasDiffSelection = false
 	if v.leftList != nil {
 		v.leftList.Refresh()
 		v.leftList.UnselectAll()
@@ -139,6 +196,7 @@ func (v *diffView) recompute() {
 		v.syncScrollPrevL = v.leftList.GetScrollOffset()
 		v.syncScrollPrevR = v.rightList.GetScrollOffset()
 	}
+	v.refreshMainMenu()
 }
 
 func (v *diffView) refreshTitles() {
@@ -225,11 +283,16 @@ func (v *diffView) updateLineCell(side int) func(id widget.ListItemID, o fyne.Ca
 			tag = dr.RightTag
 		}
 		txt.SetText(formatLineForDisplay(text, v.showWhitespace))
+		var rowBG color.Color
 		if tag == LineEqual {
-			bg.FillColor = theme.Color(theme.ColorNameBackground)
+			rowBG = theme.Color(theme.ColorNameBackground)
 		} else {
-			bg.FillColor = v.tagBackground(tag)
+			rowBG = v.tagBackground(tag)
 		}
+		if v.hasDiffSelection && id == v.selectedDiffRow {
+			rowBG = blendToward(rowBG, theme.Color(theme.ColorNameSelection), 0.5)
+		}
+		bg.FillColor = rowBG
 		bg.Refresh()
 	}
 }
@@ -273,7 +336,30 @@ func (v *diffView) refreshMainToolbar() {
 			v.btnWhitespace.Importance = widget.LowImportance
 		}
 		v.btnWhitespace.Refresh()
+		if v.syncScrollOn {
+			v.btnSyncScroll.Importance = widget.MediumImportance
+		} else {
+			v.btnSyncScroll.Importance = widget.LowImportance
+		}
+		v.btnSyncScroll.Refresh()
+		v.refreshUndoRedoButtons()
 	})
+}
+
+func (v *diffView) refreshUndoRedoButtons() {
+	if v.btnUndo == nil || v.btnRedo == nil {
+		return
+	}
+	if len(v.undoStack) > 0 {
+		v.btnUndo.Enable()
+	} else {
+		v.btnUndo.Disable()
+	}
+	if len(v.redoStack) > 0 {
+		v.btnRedo.Enable()
+	} else {
+		v.btnRedo.Disable()
+	}
 }
 
 func (v *diffView) buildMainChromeToolbar() fyne.CanvasObject {
@@ -283,6 +369,23 @@ func (v *diffView) buildMainChromeToolbar() fyne.CanvasObject {
 	v.btnSaveRight.SetToolTip("Save right file (only when it has unsaved changes)")
 	v.btnSaveBoth = ttwidget.NewButtonWithIcon("", theme.ConfirmIcon(), func() { v.saveBothAttempt() })
 	v.btnSaveBoth.SetToolTip("Save both files (only sides that are dirty)")
+	v.btnUndo = ttwidget.NewButtonWithIcon("", theme.ContentUndoIcon(), func() { v.undoEdit() })
+	v.btnUndo.SetToolTip("Undo last merge edit (up to 5 steps; Cmd+Z / Ctrl+Z)")
+	v.btnRedo = ttwidget.NewButtonWithIcon("", theme.ContentRedoIcon(), func() { v.redoEdit() })
+	v.btnRedo.SetToolTip("Redo merge edit (up to 5 steps; Shift+Cmd+Z / Ctrl+Shift+Z)")
+	v.btnUndo.Disable()
+	v.btnRedo.Disable()
+	v.btnSwapSides = ttwidget.NewButtonWithIcon("", theme.ViewRestoreIcon(), func() { v.swapSides() })
+	v.btnSwapSides.SetToolTip("Swap left and right files (paths and contents; Cmd+Shift+X / Ctrl+Shift+X)")
+	v.btnSyncScroll = ttwidget.NewButtonWithIcon("", theme.MailReplyAllIcon(), func() {
+		v.syncScrollOn = !v.syncScrollOn
+		if v.syncScrollOn && v.leftList != nil && v.rightList != nil {
+			v.syncScrollPrevL = v.leftList.GetScrollOffset()
+			v.syncScrollPrevR = v.rightList.GetScrollOffset()
+		}
+		v.refreshMainToolbar()
+	})
+	v.btnSyncScroll.SetToolTip("Sync scroll: keep left and right panes at the same vertical offset when scrolling")
 	v.btnLineNums = ttwidget.NewButtonWithIcon("", theme.ListIcon(), func() {
 		v.showLineNumbers = !v.showLineNumbers
 		v.app.Preferences().SetBool(prefShowLineNumbers, v.showLineNumbers)
@@ -299,27 +402,32 @@ func (v *diffView) buildMainChromeToolbar() fyne.CanvasObject {
 		v.refreshMainMenu()
 	})
 	v.btnWhitespace.SetToolTip("Toggle visible whitespace (· space, → tab)")
-	for _, b := range []*ttwidget.Button{v.btnSaveLeft, v.btnSaveRight, v.btnSaveBoth, v.btnLineNums, v.btnWhitespace} {
+	for _, b := range []*ttwidget.Button{v.btnSaveLeft, v.btnSaveRight, v.btnSaveBoth, v.btnUndo, v.btnRedo, v.btnSwapSides, v.btnSyncScroll, v.btnLineNums, v.btnWhitespace} {
 		b.Importance = widget.LowImportance
 	}
-	// Icon-only: order is save left, save right, save both | line numbers | show whitespace.
+	// Icon-only: save left/right/both | undo/redo | swap sides | sync scroll | line numbers | whitespace.
 	return container.NewHBox(
 		v.btnSaveLeft,
 		v.btnSaveRight,
 		v.btnSaveBoth,
 		widget.NewSeparator(),
+		v.btnUndo,
+		v.btnRedo,
+		widget.NewSeparator(),
+		v.btnSwapSides,
+		v.btnSyncScroll,
 		v.btnLineNums,
 		v.btnWhitespace,
 	)
 }
 
-func (v *diffView) showMergeMenu(rowID widget.ListItemID, abs fyne.Position) {
+func (v *diffView) showMergeMenu(fromSide int, rowID widget.ListItemID, abs fyne.Position) {
 	if v.model == nil || rowID < 0 || rowID >= len(v.model.Rows) || v.win == nil {
 		return
 	}
 	rid := rowID
 	dr := v.model.Rows[rid]
-	takeLeft := fyne.NewMenuItem("Take left into right file", func() {
+	applyL := fyne.NewMenuItem(applyLeftToRightMenuLabel(dr), func() {
 		ll := splitSourceLines(v.leftT)
 		rr := splitSourceLines(v.rightT)
 		if v.model == nil {
@@ -330,6 +438,7 @@ func (v *diffView) showMergeMenu(rowID widget.ListItemID, abs fyne.Position) {
 			dialog.ShowError(fmt.Errorf("cannot apply left to right for this row"), v.win)
 			return
 		}
+		v.beginEdit()
 		v.rightT = joinSourceLines(newR)
 		v.rightDirty = true
 		v.recompute()
@@ -337,7 +446,8 @@ func (v *diffView) showMergeMenu(rowID widget.ListItemID, abs fyne.Position) {
 		v.refreshMainToolbar()
 		v.refreshMainMenu()
 	})
-	takeRight := fyne.NewMenuItem("Take right into left file", func() {
+	applyL.Disabled = !canApplyLeftToRightAtRow(v.model, rid)
+	applyR := fyne.NewMenuItem(applyRightToLeftMenuLabel(dr), func() {
 		ll := splitSourceLines(v.leftT)
 		rr := splitSourceLines(v.rightT)
 		if v.model == nil {
@@ -348,6 +458,7 @@ func (v *diffView) showMergeMenu(rowID widget.ListItemID, abs fyne.Position) {
 			dialog.ShowError(fmt.Errorf("cannot apply right to left for this row"), v.win)
 			return
 		}
+		v.beginEdit()
 		v.leftT = joinSourceLines(newL)
 		v.leftDirty = true
 		v.recompute()
@@ -355,6 +466,7 @@ func (v *diffView) showMergeMenu(rowID widget.ListItemID, abs fyne.Position) {
 		v.refreshMainToolbar()
 		v.refreshMainMenu()
 	})
+	applyR.Disabled = !canApplyRightToLeftAtRow(v.model, rid)
 	delLeft := fyne.NewMenuItem("Delete line from left file", func() {
 		ll := splitSourceLines(v.leftT)
 		if v.model == nil {
@@ -365,6 +477,7 @@ func (v *diffView) showMergeMenu(rowID widget.ListItemID, abs fyne.Position) {
 			dialog.ShowError(fmt.Errorf("no line to delete on the left for this row"), v.win)
 			return
 		}
+		v.beginEdit()
 		v.leftT = joinSourceLines(newL)
 		v.leftDirty = true
 		v.recompute()
@@ -382,6 +495,7 @@ func (v *diffView) showMergeMenu(rowID widget.ListItemID, abs fyne.Position) {
 			dialog.ShowError(fmt.Errorf("no line to delete on the right for this row"), v.win)
 			return
 		}
+		v.beginEdit()
 		v.rightT = joinSourceLines(newR)
 		v.rightDirty = true
 		v.recompute()
@@ -391,16 +505,32 @@ func (v *diffView) showMergeMenu(rowID widget.ListItemID, abs fyne.Position) {
 	})
 	delLeft.Disabled = dr.LeftLineNo <= 0
 	delRight.Disabled = dr.RightLineNo <= 0
-	widget.ShowPopUpMenuAtPosition(fyne.NewMenu("",
-		takeLeft,
-		takeRight,
+
+	copyLeft := fyne.NewMenuItem("Copy left line", func() { v.copyLeftLineAtRow(rid) })
+	copyLeft.Disabled = dr.LeftLineNo <= 0
+	copyRight := fyne.NewMenuItem("Copy right line", func() { v.copyRightLineAtRow(rid) })
+	copyRight.Disabled = dr.RightLineNo <= 0
+	copyRow := fyne.NewMenuItem("Copy aligned row", func() { v.copyAlignedRowClipboard(rid) })
+	copyRow.Disabled = dr.LeftLineNo <= 0 && dr.RightLineNo <= 0
+
+	var mergeItems []*fyne.MenuItem
+	if fromSide == 0 {
+		mergeItems = []*fyne.MenuItem{applyL, applyR}
+	} else {
+		mergeItems = []*fyne.MenuItem{applyR, applyL}
+	}
+	items := []*fyne.MenuItem{
+		copyLeft, copyRight, copyRow,
 		fyne.NewMenuItemSeparator(),
-		delLeft,
-		delRight,
-	), v.win.Canvas(), abs)
+	}
+	items = append(items, mergeItems...)
+	items = append(items, fyne.NewMenuItemSeparator(), delLeft, delRight)
+	v.showFlyoutMenu(fyne.NewMenu("", items...), abs)
 }
 
 func (v *diffView) syncFrom(_ *widget.List, dst *widget.List, id widget.ListItemID) {
+	v.hasDiffSelection = true
+	v.selectedDiffRow = id
 	if v.syncSel {
 		return
 	}
@@ -408,6 +538,7 @@ func (v *diffView) syncFrom(_ *widget.List, dst *widget.List, id widget.ListItem
 	dst.Select(id)
 	dst.ScrollTo(id)
 	v.syncSel = false
+	v.refreshMainMenu()
 }
 
 func (v *diffView) jumpToFileStart() {
@@ -425,6 +556,7 @@ func (v *diffView) jumpToFileStart() {
 		v.syncScrollPrevL = v.leftList.GetScrollOffset()
 		v.syncScrollPrevR = v.rightList.GetScrollOffset()
 	}
+	v.refreshMainMenu()
 }
 
 func (v *diffView) jumpToFileEnd() {
@@ -445,6 +577,7 @@ func (v *diffView) jumpToFileEnd() {
 		v.syncScrollPrevL = v.leftList.GetScrollOffset()
 		v.syncScrollPrevR = v.rightList.GetScrollOffset()
 	}
+	v.refreshMainMenu()
 }
 
 func (v *diffView) jumpDiff(delta int) {
@@ -469,6 +602,7 @@ func (v *diffView) jumpDiff(delta int) {
 		v.syncScrollPrevL = v.leftList.GetScrollOffset()
 		v.syncScrollPrevR = v.rightList.GetScrollOffset()
 	}
+	v.refreshMainMenu()
 }
 
 func abs32(x float32) float32 {
@@ -533,6 +667,7 @@ func (v *diffView) readURI(u fyne.URI) (string, []byte, error) {
 
 func (v *diffView) completeLoad(side int, path, text string) {
 	fyne.Do(func() {
+		v.clearEditHistory()
 		if side == 0 {
 			v.leftP, v.leftT = path, text
 			v.leftDirty = false
@@ -579,7 +714,7 @@ func (v *diffView) showRecentMenuForSide(side int, anchor fyne.CanvasObject) {
 	}
 	ap := v.app.Driver().AbsolutePositionForObject(anchor)
 	sz := anchor.Size()
-	widget.ShowPopUpMenuAtPosition(v.buildRecentSubmenu(side), v.win.Canvas(), fyne.NewPos(ap.X, ap.Y+sz.Height))
+	v.showFlyoutMenu(v.buildRecentSubmenu(side), fyne.NewPos(ap.X, ap.Y+sz.Height))
 }
 
 func (v *diffView) openFileDialog(side int) {
@@ -666,19 +801,37 @@ func (v *diffView) buildToolbar(side int) *fyne.Container {
 	open.SetToolTip("Choose a file from disk for this side")
 	open.Importance = widget.MediumImportance
 
-	row := container.NewHBox(first, prev, next, last, widget.NewSeparator(), recent, widget.NewSeparator(), open)
-	if side == 0 {
-		sync := ttwidget.NewCheck("Sync scroll", func(on bool) {
-			v.syncScrollOn = on
-			if on && v.leftList != nil && v.rightList != nil {
-				v.syncScrollPrevL = v.leftList.GetScrollOffset()
-				v.syncScrollPrevR = v.rightList.GetScrollOffset()
-			}
-		})
-		sync.SetToolTip("Keep left and right scroll position aligned")
-		row = container.NewHBox(first, prev, next, last, widget.NewSeparator(), sync, widget.NewSeparator(), recent, widget.NewSeparator(), open)
+	top := container.NewHBox(first, prev, next, last, widget.NewSeparator(), recent, widget.NewSeparator(), open)
+
+	entry := widget.NewEntry()
+	entry.SetPlaceHolder("Find…")
+	entry.OnSubmitted = func(_ string) { v.findInPane(side, true) }
+	// HBox would keep the entry at its tiny intrinsic min width; force ~5× that (floor 360px).
+	findW := entry.MinSize().Width * 5
+	if findW < 360 {
+		findW = 360
 	}
-	return row
+	findGuide := canvas.NewRectangle(color.Transparent)
+	findGuide.SetMinSize(fyne.NewSize(findW, 1))
+	entryWide := container.NewMax(findGuide, entry)
+
+	re := ttwidget.NewCheck(".*", nil)
+	re.SetToolTip("Search with regular expressions (Go regexp syntax). When off, search is literal text.")
+	caseChk := ttwidget.NewCheck("Aa", nil)
+	caseChk.SetToolTip("Match case. When off, literal search ignores case; regex search adds (?i) unless the pattern already sets it.")
+	findPrev := ttwidget.NewButtonWithIcon("", theme.MediaSkipPreviousIcon(), func() { v.findInPane(side, false) })
+	findPrev.SetToolTip("Find previous in this pane (wraps)")
+	findNext := ttwidget.NewButtonWithIcon("", theme.MediaSkipNextIcon(), func() { v.findInPane(side, true) })
+	findNext.SetToolTip("Find next in this pane (wraps)")
+	for _, b := range []*ttwidget.Button{findPrev, findNext} {
+		b.Importance = widget.LowImportance
+	}
+	v.paneSearchEntry[side] = entry
+	v.paneSearchRegex[side] = re
+	v.paneSearchCase[side] = caseChk
+
+	searchRow := container.NewHBox(entryWide, re, caseChk, findPrev, findNext)
+	return container.NewVBox(top, searchRow)
 }
 
 func (v *diffView) buildUI() fyne.CanvasObject {
@@ -689,8 +842,8 @@ func (v *diffView) buildUI() fyne.CanvasObject {
 	v.leftTitle.Truncation = fyne.TextTruncateEllipsis
 	v.rightTitle.Truncation = fyne.TextTruncateEllipsis
 
-	hintL := widget.NewLabel("Drop a file here or use Browse / File menu")
-	hintR := widget.NewLabel("Drop a file here or use Browse / File menu")
+	hintL := widget.NewLabel("Drop a file here or use Recent / Browse above, or File menu")
+	hintR := widget.NewLabel("Drop a file here or use Recent / Browse above, or File menu")
 	hintL.TextStyle = fyne.TextStyle{Italic: true}
 	hintR.TextStyle = fyne.TextStyle{Italic: true}
 
@@ -760,6 +913,33 @@ func (v *diffView) refreshDiffLists() {
 	}
 }
 
+func (v *diffView) registerMainCanvasShortcuts(c fyne.Canvas) {
+	c.AddShortcut(&desktop.CustomShortcut{KeyName: fyne.KeyZ, Modifier: fyne.KeyModifierShortcutDefault}, func(fyne.Shortcut) {
+		v.undoEdit()
+	})
+	c.AddShortcut(&desktop.CustomShortcut{KeyName: fyne.KeyZ, Modifier: fyne.KeyModifierShortcutDefault | fyne.KeyModifierShift}, func(fyne.Shortcut) {
+		v.redoEdit()
+	})
+	c.AddShortcut(&desktop.CustomShortcut{KeyName: fyne.KeyC, Modifier: fyne.KeyModifierShortcutDefault}, func(fyne.Shortcut) {
+		v.copySelectedRowToClipboard()
+	})
+	c.AddShortcut(&desktop.CustomShortcut{KeyName: fyne.KeyX, Modifier: fyne.KeyModifierShortcutDefault | fyne.KeyModifierShift}, func(fyne.Shortcut) {
+		v.swapSides()
+	})
+	c.AddShortcut(&desktop.CustomShortcut{KeyName: fyne.KeyComma, Modifier: fyne.KeyModifierAlt}, func(fyne.Shortcut) {
+		v.jumpDiff(-1)
+	})
+	c.AddShortcut(&desktop.CustomShortcut{KeyName: fyne.KeyPeriod, Modifier: fyne.KeyModifierAlt}, func(fyne.Shortcut) {
+		v.jumpDiff(1)
+	})
+	c.AddShortcut(&desktop.CustomShortcut{KeyName: fyne.KeyHome, Modifier: fyne.KeyModifierAlt}, func(fyne.Shortcut) {
+		v.jumpToFileStart()
+	})
+	c.AddShortcut(&desktop.CustomShortcut{KeyName: fyne.KeyEnd, Modifier: fyne.KeyModifierAlt}, func(fyne.Shortcut) {
+		v.jumpToFileEnd()
+	})
+}
+
 func runApp() {
 	a := app.NewWithID(appID)
 	loadTheme(a)
@@ -773,13 +953,18 @@ func runApp() {
 	v.win = w
 	w.SetIcon(resourceKrankyBearHackerPng)
 	w.SetContent(fynetooltip.AddWindowToolTipLayer(container.NewPadded(v.buildUI()), w.Canvas()))
-	w.Resize(fyne.NewSize(1100, 700))
+	v.registerMainCanvasShortcuts(w.Canvas())
+	w.Resize(fyne.NewSize(1100, 800))
 	w.SetOnDropped(v.dropTarget)
 
 	// Closing the main window must exit the app and tear down the system tray
 	// (driver Quit), not leave helper windows or tray running.
 	w.SetMaster()
 	w.SetCloseIntercept(func() {
+		if v.flyoutPop != nil {
+			fynetooltip.DestroyPopUpToolTipLayer(v.flyoutPop)
+			v.flyoutPop = nil
+		}
 		fynetooltip.DestroyWindowToolTipLayer(w.Canvas())
 		quitFromMainWindow(a)
 	})

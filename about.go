@@ -36,7 +36,7 @@ func showAbout(a fyne.App) {
 	author := widget.NewLabel("By " + appAuthor)
 	author.Alignment = fyne.TextAlignCenter
 
-	licenseURL, _ := url.Parse("https://github.com/amarillier/KrankyBearDiff/blob/main/LICENSE")
+	licenseURL, _ := url.Parse("https://github.com/amarillier/KrankyBearDiff/blob/allanm/LICENSE")
 	licenseLink := widget.NewHyperlink("License Information", licenseURL)
 	licenseLink.Alignment = fyne.TextAlignCenter
 

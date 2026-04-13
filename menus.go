@@ -5,6 +5,20 @@ import (
 	"fyne.io/fyne/v2/driver/desktop"
 )
 
+func undoMenuItem(v *diffView) *fyne.MenuItem {
+	it := fyne.NewMenuItem("Undo", func() { v.undoEdit() })
+	it.Shortcut = &desktop.CustomShortcut{KeyName: fyne.KeyZ, Modifier: fyne.KeyModifierShortcutDefault}
+	it.Disabled = len(v.undoStack) == 0
+	return it
+}
+
+func redoMenuItem(v *diffView) *fyne.MenuItem {
+	it := fyne.NewMenuItem("Redo", func() { v.redoEdit() })
+	it.Shortcut = &desktop.CustomShortcut{KeyName: fyne.KeyZ, Modifier: fyne.KeyModifierShortcutDefault | fyne.KeyModifierShift}
+	it.Disabled = len(v.redoStack) == 0
+	return it
+}
+
 func lineNumsMenuItem(v *diffView) *fyne.MenuItem {
 	it := fyne.NewMenuItem("Line Numbers", func() {
 		v.showLineNumbers = !v.showLineNumbers
@@ -96,9 +110,49 @@ func (v *diffView) buildMainMenu() *fyne.MainMenu {
 		fyne.NewMenuItem("Quit", func() { quitFromMainWindow(v.app) }),
 	)
 
+	copyAligned := fyne.NewMenuItem("Copy aligned row", func() { v.copySelectedRowToClipboard() })
+	copyAligned.Shortcut = &desktop.CustomShortcut{KeyName: fyne.KeyC, Modifier: fyne.KeyModifierShortcutDefault}
+	selOK := v.hasDiffSelection && v.model != nil && v.selectedDiffRow >= 0 && v.selectedDiffRow < len(v.model.Rows)
+	rowCopyOK := false
+	if selOK {
+		dr := v.model.Rows[v.selectedDiffRow]
+		rowCopyOK = dr.LeftLineNo > 0 || dr.RightLineNo > 0
+	}
+	copyAligned.Disabled = !selOK || !rowCopyOK
+
+	edit := fyne.NewMenu("Edit",
+		undoMenuItem(v),
+		redoMenuItem(v),
+		fyne.NewMenuItemSeparator(),
+		copyAligned,
+	)
+
+	noChanges := v.model == nil || len(v.model.ChangeIndices) == 0
+	emptyDiff := v.model == nil || len(v.model.Rows) == 0
+	prevChange := fyne.NewMenuItem("Previous change", func() { v.jumpDiff(-1) })
+	prevChange.Shortcut = &desktop.CustomShortcut{KeyName: fyne.KeyComma, Modifier: fyne.KeyModifierAlt}
+	prevChange.Disabled = noChanges
+	nextChange := fyne.NewMenuItem("Next change", func() { v.jumpDiff(1) })
+	nextChange.Shortcut = &desktop.CustomShortcut{KeyName: fyne.KeyPeriod, Modifier: fyne.KeyModifierAlt}
+	nextChange.Disabled = noChanges
+	jumpStart := fyne.NewMenuItem("Jump to start of diff", func() { v.jumpToFileStart() })
+	jumpStart.Shortcut = &desktop.CustomShortcut{KeyName: fyne.KeyHome, Modifier: fyne.KeyModifierAlt}
+	jumpStart.Disabled = emptyDiff
+	jumpEnd := fyne.NewMenuItem("Jump to end of diff", func() { v.jumpToFileEnd() })
+	jumpEnd.Shortcut = &desktop.CustomShortcut{KeyName: fyne.KeyEnd, Modifier: fyne.KeyModifierAlt}
+	jumpEnd.Disabled = emptyDiff
+	swapSides := fyne.NewMenuItem("Swap left and right", func() { v.swapSides() })
+	swapSides.Shortcut = &desktop.CustomShortcut{KeyName: fyne.KeyX, Modifier: fyne.KeyModifierShortcutDefault | fyne.KeyModifierShift}
+
 	view := fyne.NewMenu("View",
 		fyne.NewMenuItem("Show All Windows", func() { bringAllAppWindowsToFront(v.app, v.win) }),
 		fyne.NewMenuItem("Hide All Windows", func() { hideAllAppWindows(v.app) }),
+		fyne.NewMenuItemSeparator(),
+		prevChange,
+		nextChange,
+		jumpStart,
+		jumpEnd,
+		swapSides,
 		fyne.NewMenuItemSeparator(),
 		lineNumsMenuItem(v),
 		showWhitespaceMenuItem(v),
@@ -123,7 +177,7 @@ func (v *diffView) buildMainMenu() *fyne.MainMenu {
 		fyne.NewMenuItem("Check for Updates…", func() { checkForUpdates(v.app) }),
 	)
 
-	return fyne.NewMainMenu(file, view, help)
+	return fyne.NewMainMenu(file, edit, view, help)
 }
 
 // buildTrayMenu returns the system tray menu. It must stay shallow (no nested

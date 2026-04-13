@@ -1,8 +1,19 @@
 Release notes
 
-0.1.NEXT
-- nothing specific planned for now
+0.2.NEXT
+- Ideas under consideration: export unified patch; other small workflow tweaks.
 
-0.1.0 
+Monday, April 14, 2026
+0.2.0
+- Update check: semver-style compare to GitHub latest; clearer update dialog; alternate artwork when local build is ahead of the latest release.
+- Merge UX: clearer selected-row highlight; context menu and recent-files menu use *widget.PopUp with tooltip layers; vendored fyne-tooltip (third_party) falls back to the window layer for unknown overlays (e.g. system dialogs) so toolbar tooltips no longer log errors.
+- Merge menu: row-specific labels (replace / insert / remove) and pane-aware ordering; same merge logic as before.
+- Edit workflow: undo/redo (up to five merge steps), copy left/right/aligned row (context menu and Cmd/Ctrl+C), swap left/right files (toolbar, View menu, Shift+Cmd/Ctrl+X); sync-scroll control moved to the main toolbar as an icon.
+- Find in pane: literal or regex (Go regexp), match case, prev/next (wraps), wide Find field; matches jump both panes to the aligned row; sync-scroll anchors refresh when enabled.
+- Navigation shortcuts: Alt+, / Alt+. (prev/next change), Alt+Home / Alt+End (start/end of diff); View and Edit menu entries with shortcuts.
+- Documentation: README and in-app Help updated for the above.
+
+Monday, April 14, 2026
+0.1.0
 - initial checkin
 - Windows, Linux and MacOS diff utility

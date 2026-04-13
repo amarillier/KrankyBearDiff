@@ -59,18 +59,24 @@ VIEW
 NAVIGATION
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 - Main toolbar (under the app title): icon buttons left-to-right — save left file, save right file,
-  save both (if either side is dirty); line numbers toggle; show-whitespace toggle. Medium emphasis
-  indicates an option is on. Hover those icons (and the per-pane icons below) for short descriptions
-  (tooltips via fyne-tooltip on the main window).
+  save both (if either side is dirty); undo and redo; swap left/right files; sync-scroll toggle;
+  line numbers toggle; show-whitespace toggle. Medium emphasis indicates an option is on. Hover those
+  icons (and the per-pane icons below) for short descriptions (tooltips via fyne-tooltip on the main window;
+  a patched vendored copy avoids spurious errors when dialogs or other overlays are on screen).
 - Per-pane toolbar: double-arrow icons jump to the start or end of the diff; single arrows jump to the
   previous or next changed block (wraps at the ends). The clock/history icon opens recent files for
   that pane (same entries as File → Open Recent → Left file or Right file). Browse… opens the file picker.
-- Left pane: enable “Sync scroll” so scrolling either list (wheel, trackpad, or scrollbar) keeps
-  both panes at the same vertical offset.
+  Below that: a wide Find field (press Enter for next match), “.*” for regex (Go regexp), “Aa” for match case,
+  and skip-previous / skip-next icons to search only that pane’s file (wraps). A match selects the aligned
+  row in both lists and scrolls both to it; when Sync scroll is on, scroll anchors update so linked scrolling stays coherent.
+- With sync scroll on, scrolling either list (wheel, trackpad, or scrollbar) keeps both panes at the
+  same vertical offset.
 - Click a line in one list: the other pane selects and scrolls to the same aligned row (one-click sync).
-- Right-click (secondary click) a line: context menu — take left into right or right into left; delete
-  the line from the left or right file on this row (when that side has a real line). Edits stay in memory
-  until you use File → Save or the main save icons.
+- Right-click (secondary click) a line: context menu — copy left line, copy right line, or copy the
+  aligned row (one or both sides, newline between them); then merge actions with row-specific labels
+  (replace one side with the other on matching lines, insert a missing line, or remove an extra line).
+  The first merge action is the one for the pane you clicked (left vs right). Delete removes a line on
+  that side when this row has a real line there. Edits stay in memory until you use File → Save or the main save icons.
 
 UPDATES
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -85,13 +91,18 @@ LIMITATIONS
 
 KEYBOARD
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-• Cmd/Ctrl+Q — Quit (also File → Quit)
+• Cmd/Ctrl Q — Quit (also File → Quit)
+• Cmd/Ctrl Z / Shift Cmd/Ctrl Z — Undo / Redo merge edits
+• Cmd/Ctrl C — Copy aligned row (selected line; see Edit menu)
+• Shift Cmd/Ctrl X — Swap left and right files (paths and contents; clears undo history)
+• Alt , / Alt . — Previous / next change (wraps; also View menu)
+• Alt Home / Alt End — Jump to start / end of diff (also View menu)
 • Standard window shortcuts for minimize / close
 
 MORE INFORMATION
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 • GitHub: https://github.com/amarillier/KrankyBearDiff
-• License: https://github.com/amarillier/KrankyBearDiff/blob/main/LICENSE
+• License: https://github.com/amarillier/KrankyBearDiff/blob/allanm/LICENSE
 `
 
 	helpLabel := widget.NewLabel(helpText)
@@ -101,7 +112,7 @@ MORE INFORMATION
 	githubLink := widget.NewHyperlink("Visit GitHub Repository", githubURL)
 	githubLink.Alignment = fyne.TextAlignCenter
 
-	licenseURL, _ := url.Parse("https://github.com/amarillier/KrankyBearDiff/blob/main/LICENSE")
+	licenseURL, _ := url.Parse("https://github.com/amarillier/KrankyBearDiff/blob/allanm/LICENSE")
 	licenseLink := widget.NewHyperlink("View License", licenseURL)
 	licenseLink.Alignment = fyne.TextAlignCenter
 
