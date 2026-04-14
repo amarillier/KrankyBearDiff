@@ -21,7 +21,7 @@ The UI follows Fyne’s patterns: clarity, a small set of strong controls, and b
 - **Editing** — Right-click a row for copy actions, then merge actions labeled for the row type (**replace** line on one side with the other, **insert** a line from the other file, or **remove** a line). The pane you click lists its most relevant action first. **Delete** removes a line on that side when present; changes stay in memory until you save.
 - **Tooltips** — Main and per-pane toolbar icons use [fyne-tooltip](https://github.com/dweymouth/fyne-tooltip) (vendored with a small overlay fallback; see **Dependencies**); hover for short descriptions even when a dialog or other overlay is open.
 - **System tray** — Show/hide windows, open files, preferences, theme, help, about, updates, quit (where supported).
-- **Updates** — **Help → Check for Updates…** compares your version to GitHub’s latest release (semver-style); optional **Nerd** bear artwork when your build is ahead of the published tag.
+- **Updates** — **Help → Check for Updates…** compares your version to GitHub’s latest release (semver-style); optional **Nerd** bear artwork when your build is ahead of the published tag. On startup, a **background** check (at most about once every **seven days**, using the same GitHub “latest release” endpoint) runs quietly; if a newer version exists, an update window appears—network failures are ignored.
 
 ## Requirements
 
@@ -66,7 +66,12 @@ Direct modules (see `go.mod`):
 
 - [fyne.io/fyne/v2](https://fyne.io/) — GUI toolkit  
 - [github.com/sergi/go-diff](https://github.com/sergi/go-diff) — diff engine  
+- [github.com/amarillier/go-update-checker](https://github.com/amarillier/go-update-checker) — throttled launch-time update checks (vendored under `third_party/go-update-checker`; see `go.mod` `replace`)
 - [github.com/dweymouth/fyne-tooltip](https://github.com/dweymouth/fyne-tooltip) — toolbar tooltips (vendored under `third_party/fyne-tooltip`; see `go.mod` `replace`)
+
+### Why we vendor go-update-checker
+
+The published module stores its `latestcheck.json` cache in the **process working directory**, which is wrong for a GUI app launched from arbitrary folders. The vendored copy adds **`SetCheckStatePath`** so the cache lives next to Fyne’s **`preferences.json`** for this app. It also closes HTTP responses, sends a GitHub **User-Agent**, checks API status codes, trims **`v`** prefixes for semver compare, and creates the parent directory when saving the cache.
 
 ### Why we vendor and patch fyne-tooltip
 

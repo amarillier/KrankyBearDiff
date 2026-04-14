@@ -4,8 +4,11 @@ go 1.25.1
 
 replace github.com/dweymouth/fyne-tooltip => ./third_party/fyne-tooltip
 
+// replace github.com/amarillier/go-update-checker => ./third_party/go-update-checker
+
 require (
 	fyne.io/fyne/v2 v2.7.3
+	github.com/amarillier/go-update-checker v0.0.4
 	github.com/dweymouth/fyne-tooltip v0.4.0
 	github.com/sergi/go-diff v1.3.1
 )
@@ -27,6 +30,7 @@ require (
 	github.com/godbus/dbus/v5 v5.1.0 // indirect
 	github.com/hack-pad/go-indexeddb v0.3.2 // indirect
 	github.com/hack-pad/safejs v0.1.0 // indirect
+	github.com/hashicorp/go-version v1.3.0 // indirect
 	github.com/jeandeaual/go-locale v0.0.0-20250612000132-0ef82f21eade // indirect
 	github.com/jsummers/gobmp v0.0.0-20230614200233-a9de23ed2e25 // indirect
 	github.com/nfnt/resize v0.0.0-20180221191011-83c6a9932646 // indirect

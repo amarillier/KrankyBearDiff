@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"fyne.io/fyne/v2"
+	updatechecker "github.com/amarillier/go-update-checker"
 )
 
 const githubReleasesAPI = "https://api.github.com/repos/amarillier/KrankyBearDiff/releases/latest"
@@ -154,4 +155,40 @@ func checkForUpdates(a fyne.App) {
 
 		fyne.Do(func() { showUpdateDialog(a, msg, available, localAhead) })
 	}()
+}
+
+// Interval between automatic update checks on startup (manual Help → Check for Updates is unchanged).
+const launchUpdateCheckIntervalDays = 7
+
+// maybeCheckUpdatesOnLaunch runs in the background after the UI is up. It uses
+// github.com/amarillier/go-update-checker with a minimum interval so we do not
+// call GitHub on every launch. Only opens the dialog when a newer release exists;
+// network errors are silent (same idea as KrankyBearClock).
+func maybeCheckUpdatesOnLaunch(a fyne.App) {
+	path := fyneUpdateCheckStatePath(appID)
+	if path == "" {
+		return
+	}
+	updatechecker.SetCheckStatePath(path)
+	uc := updatechecker.New(
+		"amarillier",
+		"KrankyBearDiff",
+		appName,
+		"https://github.com/amarillier/KrankyBearDiff/releases/latest",
+		launchUpdateCheckIntervalDays,
+		false,
+	)
+	uc.CheckForUpdate(appVersion)
+	if !uc.UpdateAvailable {
+		return
+	}
+	remoteTag := strings.TrimSpace(uc.RemoteTag)
+	name := strings.TrimSpace(uc.RemoteName)
+	fyne.Do(func() {
+		msg := fmt.Sprintf("A newer release is available.\n\nYou have: %s\nLatest: %s (%s).", appVersion, remoteTag, name)
+		if remoteTag == "" {
+			msg = fmt.Sprintf("A newer release is available.\n\nYou have: %s", appVersion)
+		}
+		showUpdateDialog(a, msg, true, false)
+	})
 }

@@ -941,6 +941,7 @@ func (v *diffView) registerMainCanvasShortcuts(c fyne.Canvas) {
 }
 
 func runApp() {
+	sanitizeFynePreferencesBeforeLoad(appID)
 	a := app.NewWithID(appID)
 	loadTheme(a)
 
@@ -971,6 +972,7 @@ func runApp() {
 
 	w.Show()
 	go v.syncScrollPollLoop()
+	go maybeCheckUpdatesOnLaunch(a)
 	v.setupMenus()
 	a.Run()
 }

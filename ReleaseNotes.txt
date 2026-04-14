@@ -3,6 +3,10 @@ Release notes
 0.2.NEXT
 - Ideas under consideration: export unified patch; other small workflow tweaks.
 
+Tuesday, April 15, 2026
+0.2.1
+- Update check: optional background check on launch (about once per 7 days) using vendored github.com/amarillier/go-update-checker; Help → Check for Updates unchanged.
+
 Monday, April 14, 2026
 0.2.0
 - Update check: semver-style compare to GitHub latest; clearer update dialog; alternate artwork when local build is ahead of the latest release.

@@ -80,7 +80,9 @@ NAVIGATION
 
 UPDATES
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Help → Check for Updates… queries GitHub for the latest release.
+Help → Check for Updates… queries GitHub for the latest release (and compares versions).
+On startup the app may also check in the background about once every seven days; if a newer
+release exists, the same style of update window appears. Failed background checks are silent.
 
 LIMITATIONS
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
