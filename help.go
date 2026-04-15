@@ -37,6 +37,10 @@ OPENING FILES
 • File → Save Left File / Save Right File / Save Both Files — write the in-memory buffer back to the
   path shown above each pane (only enabled when that side has unsaved edits and a path).
 • File → Preferences… — theme, line numbers, whitespace, sync scroll, optional remembered window size, and clearing recent-file lists (applied when you click Save)
+• File → Export unified patch… — save a unified diff (left → right) to a .patch file for use with patch(1), git apply, or similar tools (see “Unified patch” below). Shortcut: Shift+Cmd/Ctrl+E.
+• Edit → Copy unified patch — same unified diff text to the clipboard (Shift+Cmd/Ctrl+U).
+• Edit → Copy left line / Copy right line / Copy aligned row — use the currently selected aligned row (select a line in either list first).
+• Edit → row merge actions — same labels as the row context menu (e.g. Replace right with left, Insert left line into right, Delete line from left/right file), operating on the selected row.
 • Browse… in each pane’s toolbar
 • Drag and drop a file onto the left or right pane (drop near the
   pane you want to load; if the pointer is between panes, the drop
@@ -72,6 +76,8 @@ NAVIGATION
   row in both lists and scrolls both to it; when Sync scroll is on, scroll anchors update so linked scrolling stays coherent.
 - With sync scroll on, scrolling either list (wheel, trackpad, or scrollbar) keeps both panes at the
   same vertical offset.
+- The vertical divider between panes can be dragged to change the left/right width ratio; the ratio is
+  saved when you quit the app and restored on the next launch.
 - Click a line in one list: the other pane selects and scrolls to the same aligned row (one-click sync).
 - Right-click (secondary click) a line: context menu — copy left line, copy right line, or copy the
   aligned row (one or both sides, newline between them); then merge actions with row-specific labels
@@ -92,11 +98,39 @@ LIMITATIONS
 • Display is text with diff highlighting, not full syntax
   highlighting for every language.
 
+UNIFIED PATCH
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Export and Copy unified patch use the current left and right buffers (as on disk when you last loaded or saved) to build a
+unified diff: the left file is the “old” (---) side and the right file is the “new” (+++) side.
+Headers use the basename of each path (or “left” / “right” if a side has no path). Identical
+files produce an empty patch (file or clipboard).
+
+Merging in the app: use the row context menu or Edit → merge actions (same operations), plus undo/redo.
+On rows where the merge action is already “Remove line from left” or “Remove line from right”, the separate
+“Delete line from …” entry is omitted — it would do the same thing. KrankyBear Diff
+does not apply a .patch file inside the app; use a patch tool or your VCS when you want to replay
+an exported diff as a file transform.
+
+Typical patch(1) usage (Unix, Linux, macOS, or Cygwin on Windows), with paths matching the
+filenames in the patch headers and your working directory chosen accordingly:
+
+• Dry run (no file changes): patch --dry-run -p0 < my.patch
+• Apply (create backups of originals): patch -b -p0 < my.patch
+• Apply (no backups): patch -p0 < my.patch
+• Strip one path component from filenames in the patch (common for Git-style “a/foo” paths): patch -p1 < my.patch
+
+-p0 means use the path exactly as given in the patch; -p1 strips the first directory (e.g. a/).
+When in doubt, use --dry-run first. To reverse a patch: patch -R -p0 < my.patch (GNU patch).
+
+GNU patch: https://www.gnu.org/software/patch/
+
 KEYBOARD
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 • Cmd/Ctrl Q — Quit (also File → Quit)
 • Cmd/Ctrl Z / Shift Cmd/Ctrl Z — Undo / Redo merge edits
 • Cmd/Ctrl C — Copy aligned row (selected line; see Edit menu)
+• Shift Cmd/Ctrl U — Copy unified patch (same text as File → Export unified patch…)
+• Shift Cmd/Ctrl E — Export unified patch… (save dialog)
 • Shift Cmd/Ctrl X — Swap left and right files (paths and contents; clears undo history)
 • Alt , / Alt . — Previous / next change (wraps; also View menu)
 • Alt Home / Alt End — Jump to start / end of diff (also View menu)

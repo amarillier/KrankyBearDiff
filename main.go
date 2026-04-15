@@ -7,7 +7,7 @@ import (
 
 const (
 	// appName    = "KrankyBear Diff"
-	appVersion = "0.2.2" // see FyneApp.toml
+	appVersion = "0.2.3" // see FyneApp.toml
 	appAuthor  = "Allan Marillier"
 )
 

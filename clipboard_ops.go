@@ -66,6 +66,20 @@ func (v *diffView) copySelectedRowToClipboard() {
 	v.copyAlignedRowClipboard(v.selectedDiffRow)
 }
 
+func (v *diffView) copySelectedLeftLine() {
+	if !v.hasDiffSelection || v.model == nil {
+		return
+	}
+	v.copyLeftLineAtRow(v.selectedDiffRow)
+}
+
+func (v *diffView) copySelectedRightLine() {
+	if !v.hasDiffSelection || v.model == nil {
+		return
+	}
+	v.copyRightLineAtRow(v.selectedDiffRow)
+}
+
 func (v *diffView) swapSides() {
 	if v.win == nil {
 		return

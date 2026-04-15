@@ -1,7 +1,14 @@
 Release notes
 
 0.2.NEXT
-- Ideas under consideration: export unified patch; other small workflow tweaks.
+- Possible later: tray menu refresh for dynamic enable/disable; last folder for patch export; word-level or syntax features if scope grows.
+
+Wednesday, April 15, 2026
+0.2.3
+- Context / Edit menus: omit “Delete line from …” when it matches “Remove line from left/right” on that row (same edit, one menu entry).
+- Edit menu: copy left line, copy right line, row merge actions (same dynamic labels as the row context menu), delete left/right line — all use the selected aligned row; system tray unchanged.
+- Edit → Copy unified patch (Shift+Cmd/Ctrl+U); File → Export unified patch… (Shift+Cmd/Ctrl+E); see Help → UNIFIED PATCH for patch(1) / Cygwin.
+- Main window: left/right pane split ratio saved on quit and restored on launch (preference key splitOffset).
 
 Wednesday, April 15, 2026
 0.2.2

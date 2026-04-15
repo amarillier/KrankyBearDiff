@@ -121,6 +121,8 @@ type diffView struct {
 	paneSearchCase  [2]*ttwidget.Check
 
 	btnReloadPane [2]*ttwidget.Button
+
+	mainSplit *container.Split // main left/right pane split; offset persisted on quit
 }
 
 func (v *diffView) showFlyoutMenu(menu *fyne.Menu, pos fyne.Position) {
@@ -436,88 +438,96 @@ func (v *diffView) buildMainChromeToolbar() fyne.CanvasObject {
 	)
 }
 
+func (v *diffView) runApplyLeftToRightAtRow(rid widget.ListItemID) {
+	if v.model == nil || v.win == nil {
+		return
+	}
+	ll := splitSourceLines(v.leftT)
+	rr := splitSourceLines(v.rightT)
+	newR, ok := applyLeftToRightAtRow(v.model, rid, ll, rr)
+	if !ok {
+		dialog.ShowError(fmt.Errorf("cannot apply left to right for this row"), v.win)
+		return
+	}
+	v.beginEdit()
+	v.rightT = joinSourceLines(newR)
+	v.rightDirty = true
+	v.recompute()
+	v.syncScrollAfterEdit()
+	v.refreshMainToolbar()
+	v.refreshMainMenu()
+}
+
+func (v *diffView) runApplyRightToLeftAtRow(rid widget.ListItemID) {
+	if v.model == nil || v.win == nil {
+		return
+	}
+	ll := splitSourceLines(v.leftT)
+	rr := splitSourceLines(v.rightT)
+	newL, ok := applyRightToLeftAtRow(v.model, rid, ll, rr)
+	if !ok {
+		dialog.ShowError(fmt.Errorf("cannot apply right to left for this row"), v.win)
+		return
+	}
+	v.beginEdit()
+	v.leftT = joinSourceLines(newL)
+	v.leftDirty = true
+	v.recompute()
+	v.syncScrollAfterEdit()
+	v.refreshMainToolbar()
+	v.refreshMainMenu()
+}
+
+func (v *diffView) runDeleteLeftAtRow(rid widget.ListItemID) {
+	if v.model == nil || v.win == nil {
+		return
+	}
+	ll := splitSourceLines(v.leftT)
+	newL, ok := deleteLeftLineAtRow(v.model, rid, ll)
+	if !ok {
+		dialog.ShowError(fmt.Errorf("no line to delete on the left for this row"), v.win)
+		return
+	}
+	v.beginEdit()
+	v.leftT = joinSourceLines(newL)
+	v.leftDirty = true
+	v.recompute()
+	v.syncScrollAfterEdit()
+	v.refreshMainToolbar()
+	v.refreshMainMenu()
+}
+
+func (v *diffView) runDeleteRightAtRow(rid widget.ListItemID) {
+	if v.model == nil || v.win == nil {
+		return
+	}
+	rr := splitSourceLines(v.rightT)
+	newR, ok := deleteRightLineAtRow(v.model, rid, rr)
+	if !ok {
+		dialog.ShowError(fmt.Errorf("no line to delete on the right for this row"), v.win)
+		return
+	}
+	v.beginEdit()
+	v.rightT = joinSourceLines(newR)
+	v.rightDirty = true
+	v.recompute()
+	v.syncScrollAfterEdit()
+	v.refreshMainToolbar()
+	v.refreshMainMenu()
+}
+
 func (v *diffView) showMergeMenu(fromSide int, rowID widget.ListItemID, abs fyne.Position) {
 	if v.model == nil || rowID < 0 || rowID >= len(v.model.Rows) || v.win == nil {
 		return
 	}
 	rid := rowID
 	dr := v.model.Rows[rid]
-	applyL := fyne.NewMenuItem(applyLeftToRightMenuLabel(dr), func() {
-		ll := splitSourceLines(v.leftT)
-		rr := splitSourceLines(v.rightT)
-		if v.model == nil {
-			return
-		}
-		newR, ok := applyLeftToRightAtRow(v.model, rid, ll, rr)
-		if !ok {
-			dialog.ShowError(fmt.Errorf("cannot apply left to right for this row"), v.win)
-			return
-		}
-		v.beginEdit()
-		v.rightT = joinSourceLines(newR)
-		v.rightDirty = true
-		v.recompute()
-		v.syncScrollAfterEdit()
-		v.refreshMainToolbar()
-		v.refreshMainMenu()
-	})
+	applyL := fyne.NewMenuItem(applyLeftToRightMenuLabel(dr), func() { v.runApplyLeftToRightAtRow(rid) })
 	applyL.Disabled = !canApplyLeftToRightAtRow(v.model, rid)
-	applyR := fyne.NewMenuItem(applyRightToLeftMenuLabel(dr), func() {
-		ll := splitSourceLines(v.leftT)
-		rr := splitSourceLines(v.rightT)
-		if v.model == nil {
-			return
-		}
-		newL, ok := applyRightToLeftAtRow(v.model, rid, ll, rr)
-		if !ok {
-			dialog.ShowError(fmt.Errorf("cannot apply right to left for this row"), v.win)
-			return
-		}
-		v.beginEdit()
-		v.leftT = joinSourceLines(newL)
-		v.leftDirty = true
-		v.recompute()
-		v.syncScrollAfterEdit()
-		v.refreshMainToolbar()
-		v.refreshMainMenu()
-	})
+	applyR := fyne.NewMenuItem(applyRightToLeftMenuLabel(dr), func() { v.runApplyRightToLeftAtRow(rid) })
 	applyR.Disabled = !canApplyRightToLeftAtRow(v.model, rid)
-	delLeft := fyne.NewMenuItem("Delete line from left file", func() {
-		ll := splitSourceLines(v.leftT)
-		if v.model == nil {
-			return
-		}
-		newL, ok := deleteLeftLineAtRow(v.model, rid, ll)
-		if !ok {
-			dialog.ShowError(fmt.Errorf("no line to delete on the left for this row"), v.win)
-			return
-		}
-		v.beginEdit()
-		v.leftT = joinSourceLines(newL)
-		v.leftDirty = true
-		v.recompute()
-		v.syncScrollAfterEdit()
-		v.refreshMainToolbar()
-		v.refreshMainMenu()
-	})
-	delRight := fyne.NewMenuItem("Delete line from right file", func() {
-		rr := splitSourceLines(v.rightT)
-		if v.model == nil {
-			return
-		}
-		newR, ok := deleteRightLineAtRow(v.model, rid, rr)
-		if !ok {
-			dialog.ShowError(fmt.Errorf("no line to delete on the right for this row"), v.win)
-			return
-		}
-		v.beginEdit()
-		v.rightT = joinSourceLines(newR)
-		v.rightDirty = true
-		v.recompute()
-		v.syncScrollAfterEdit()
-		v.refreshMainToolbar()
-		v.refreshMainMenu()
-	})
+	delLeft := fyne.NewMenuItem("Delete line from left file", func() { v.runDeleteLeftAtRow(rid) })
+	delRight := fyne.NewMenuItem("Delete line from right file", func() { v.runDeleteRightAtRow(rid) })
 	delLeft.Disabled = dr.LeftLineNo <= 0
 	delRight.Disabled = dr.RightLineNo <= 0
 
@@ -539,7 +549,17 @@ func (v *diffView) showMergeMenu(fromSide int, rowID widget.ListItemID, abs fyne
 		fyne.NewMenuItemSeparator(),
 	}
 	items = append(items, mergeItems...)
-	items = append(items, fyne.NewMenuItemSeparator(), delLeft, delRight)
+	var delItems []*fyne.MenuItem
+	if !contextDeleteLeftDuplicatesApplyRightToLeft(dr) {
+		delItems = append(delItems, delLeft)
+	}
+	if !contextDeleteRightDuplicatesApplyLeftToRight(dr) {
+		delItems = append(delItems, delRight)
+	}
+	if len(delItems) > 0 {
+		items = append(items, fyne.NewMenuItemSeparator())
+		items = append(items, delItems...)
+	}
 	v.showFlyoutMenu(fyne.NewMenu("", items...), abs)
 }
 
@@ -939,7 +959,8 @@ func (v *diffView) buildUI() fyne.CanvasObject {
 	v.rightCol = container.NewBorder(rightHead, nil, nil, nil, rightScroll)
 
 	split := container.NewHSplit(v.leftCol, v.rightCol)
-	split.Offset = 0.5
+	split.SetOffset(loadSplitOffset(v.app))
+	v.mainSplit = split
 
 	pad := layout.NewCustomPaddedLayout(3, 0, 3, 0)
 	titleLbl := widget.NewLabel(appName)
@@ -994,6 +1015,12 @@ func (v *diffView) registerMainCanvasShortcuts(c fyne.Canvas) {
 	c.AddShortcut(&desktop.CustomShortcut{KeyName: fyne.KeyEnd, Modifier: fyne.KeyModifierAlt}, func(fyne.Shortcut) {
 		v.jumpToFileEnd()
 	})
+	c.AddShortcut(&desktop.CustomShortcut{KeyName: fyne.KeyE, Modifier: fyne.KeyModifierShortcutDefault | fyne.KeyModifierShift}, func(fyne.Shortcut) {
+		v.exportUnifiedPatch()
+	})
+	c.AddShortcut(&desktop.CustomShortcut{KeyName: fyne.KeyU, Modifier: fyne.KeyModifierShortcutDefault | fyne.KeyModifierShift}, func(fyne.Shortcut) {
+		v.copyUnifiedPatchToClipboard()
+	})
 }
 
 func runApp() {
@@ -1024,7 +1051,7 @@ func runApp() {
 			v.flyoutPop = nil
 		}
 		fynetooltip.DestroyWindowToolTipLayer(w.Canvas())
-		quitFromMainWindow(a, w)
+		quitFromMainWindow(v)
 	})
 
 	w.Show()

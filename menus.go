@@ -111,6 +111,10 @@ func (v *diffView) buildMainMenu() *fyne.MainMenu {
 	saveBoth := fyne.NewMenuItem("Save Both Files", func() { v.saveBothAttempt() })
 	saveBoth.Disabled = (v.leftP == "" || !v.leftDirty) && (v.rightP == "" || !v.rightDirty)
 
+	exportPatch := fyne.NewMenuItem("Export unified patch…", func() { v.exportUnifiedPatch() })
+	exportPatch.Disabled = v.leftT == "" && v.rightT == "" && v.leftP == "" && v.rightP == ""
+	exportPatch.Shortcut = &desktop.CustomShortcut{KeyName: fyne.KeyE, Modifier: fyne.KeyModifierShortcutDefault | fyne.KeyModifierShift}
+
 	file := fyne.NewMenu("File",
 		fyne.NewMenuItem("Open Left File…", func() { v.openFileDialog(0) }),
 		fyne.NewMenuItem("Open Right File…", func() { v.openFileDialog(1) }),
@@ -120,27 +124,115 @@ func (v *diffView) buildMainMenu() *fyne.MainMenu {
 		saveRight,
 		saveBoth,
 		fyne.NewMenuItemSeparator(),
+		exportPatch,
+		fyne.NewMenuItemSeparator(),
 		fyne.NewMenuItem("Preferences…", func() { showPreferences(v.app, v) }),
 		fyne.NewMenuItemSeparator(),
-		fyne.NewMenuItem("Quit", func() { quitFromMainWindow(v.app, v.win) }),
+		fyne.NewMenuItem("Quit", func() { quitFromMainWindow(v) }),
 	)
 
+	copyUnifiedPatch := fyne.NewMenuItem("Copy unified patch", func() { v.copyUnifiedPatchToClipboard() })
+	copyUnifiedPatch.Disabled = v.leftT == "" && v.rightT == "" && v.leftP == "" && v.rightP == ""
+	copyUnifiedPatch.Shortcut = &desktop.CustomShortcut{KeyName: fyne.KeyU, Modifier: fyne.KeyModifierShortcutDefault | fyne.KeyModifierShift}
+
+	copyLeft := fyne.NewMenuItem("Copy left line", func() { v.copySelectedLeftLine() })
+	copyRight := fyne.NewMenuItem("Copy right line", func() { v.copySelectedRightLine() })
 	copyAligned := fyne.NewMenuItem("Copy aligned row", func() { v.copySelectedRowToClipboard() })
 	copyAligned.Shortcut = &desktop.CustomShortcut{KeyName: fyne.KeyC, Modifier: fyne.KeyModifierShortcutDefault}
 	selOK := v.hasDiffSelection && v.model != nil && v.selectedDiffRow >= 0 && v.selectedDiffRow < len(v.model.Rows)
-	rowCopyOK := false
+	var dr DiffRow
 	if selOK {
-		dr := v.model.Rows[v.selectedDiffRow]
-		rowCopyOK = dr.LeftLineNo > 0 || dr.RightLineNo > 0
+		dr = v.model.Rows[v.selectedDiffRow]
 	}
-	copyAligned.Disabled = !selOK || !rowCopyOK
+	rowCopyOK := selOK && (dr.LeftLineNo > 0 || dr.RightLineNo > 0)
+	copyLeft.Disabled = !selOK || dr.LeftLineNo <= 0
+	copyRight.Disabled = !selOK || dr.RightLineNo <= 0
+	copyAligned.Disabled = !rowCopyOK
 
-	edit := fyne.NewMenu("Edit",
+	applyLRLabel := "Apply left to right"
+	applyRLLabel := "Apply right to left"
+	if selOK {
+		applyLRLabel = applyLeftToRightMenuLabel(dr)
+		applyRLLabel = applyRightToLeftMenuLabel(dr)
+	}
+	applyLR := fyne.NewMenuItem(applyLRLabel, func() {
+		if !v.hasDiffSelection || v.model == nil {
+			return
+		}
+		rid := v.selectedDiffRow
+		if rid < 0 || int(rid) >= len(v.model.Rows) {
+			return
+		}
+		v.runApplyLeftToRightAtRow(rid)
+	})
+	applyLR.Disabled = !selOK || !canApplyLeftToRightAtRow(v.model, v.selectedDiffRow)
+	applyRL := fyne.NewMenuItem(applyRLLabel, func() {
+		if !v.hasDiffSelection || v.model == nil {
+			return
+		}
+		rid := v.selectedDiffRow
+		if rid < 0 || int(rid) >= len(v.model.Rows) {
+			return
+		}
+		v.runApplyRightToLeftAtRow(rid)
+	})
+	applyRL.Disabled = !selOK || !canApplyRightToLeftAtRow(v.model, v.selectedDiffRow)
+
+	delLeftMain := fyne.NewMenuItem("Delete line from left file", func() {
+		if !v.hasDiffSelection || v.model == nil {
+			return
+		}
+		rid := v.selectedDiffRow
+		if rid < 0 || int(rid) >= len(v.model.Rows) {
+			return
+		}
+		v.runDeleteLeftAtRow(rid)
+	})
+	delLeftMain.Disabled = !selOK || dr.LeftLineNo <= 0
+	delRightMain := fyne.NewMenuItem("Delete line from right file", func() {
+		if !v.hasDiffSelection || v.model == nil {
+			return
+		}
+		rid := v.selectedDiffRow
+		if rid < 0 || int(rid) >= len(v.model.Rows) {
+			return
+		}
+		v.runDeleteRightAtRow(rid)
+	})
+	delRightMain.Disabled = !selOK || dr.RightLineNo <= 0
+
+	includeDelLeft := true
+	includeDelRight := true
+	if selOK {
+		if contextDeleteLeftDuplicatesApplyRightToLeft(dr) {
+			includeDelLeft = false
+		}
+		if contextDeleteRightDuplicatesApplyLeftToRight(dr) {
+			includeDelRight = false
+		}
+	}
+	editItems := []*fyne.MenuItem{
 		undoMenuItem(v),
 		redoMenuItem(v),
 		fyne.NewMenuItemSeparator(),
+		copyLeft,
+		copyRight,
 		copyAligned,
-	)
+		copyUnifiedPatch,
+		fyne.NewMenuItemSeparator(),
+		applyLR,
+		applyRL,
+	}
+	if includeDelLeft || includeDelRight {
+		editItems = append(editItems, fyne.NewMenuItemSeparator())
+		if includeDelLeft {
+			editItems = append(editItems, delLeftMain)
+		}
+		if includeDelRight {
+			editItems = append(editItems, delRightMain)
+		}
+	}
+	edit := fyne.NewMenu("Edit", editItems...)
 
 	noChanges := v.model == nil || len(v.model.ChangeIndices) == 0
 	emptyDiff := v.model == nil || len(v.model.Rows) == 0
@@ -204,12 +296,17 @@ func (v *diffView) buildTrayMenu() *fyne.Menu {
 	trayRecentHint := fyne.NewMenuItem("Recent files: use menu bar → File → Open Recent", nil)
 	trayRecentHint.Disabled = true
 
+	// Tray menu is built only once (see comment below); keep this item always enabled so it stays
+	// useful after files are opened. exportUnifiedPatch shows a dialog if nothing is loaded.
+	trayExportPatch := fyne.NewMenuItem("Export unified patch…", func() { v.exportUnifiedPatch() })
+
 	return fyne.NewMenu(appName,
 		fyne.NewMenuItem("Show All Windows", func() { bringAllAppWindowsToFront(v.app, v.win) }),
 		fyne.NewMenuItem("Hide All Windows", func() { hideAllAppWindows(v.app) }),
 		fyne.NewMenuItemSeparator(),
 		fyne.NewMenuItem("Open Left File…", func() { v.openFileDialog(0) }),
 		fyne.NewMenuItem("Open Right File…", func() { v.openFileDialog(1) }),
+		trayExportPatch,
 		trayRecentHint,
 		fyne.NewMenuItemSeparator(),
 		fyne.NewMenuItem("Preferences…", func() { showPreferences(v.app, v) }),
@@ -231,7 +328,7 @@ func (v *diffView) buildTrayMenu() *fyne.Menu {
 		fyne.NewMenuItem("About", func() { showAbout(v.app) }),
 		fyne.NewMenuItem("Check for Updates…", func() { checkForUpdates(v.app) }),
 		fyne.NewMenuItemSeparator(),
-		fyne.NewMenuItem("Quit", func() { quitFromMainWindow(v.app, v.win) }),
+		fyne.NewMenuItem("Quit", func() { quitFromMainWindow(v) }),
 	)
 }
 

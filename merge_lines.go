@@ -95,6 +95,18 @@ func applyLeftToRightMenuLabel(dr DiffRow) string {
 	}
 }
 
+// contextDeleteLeftDuplicatesApplyRightToLeft is true when "Delete line from left file" would do the
+// same as applyRightToLeft on this row (label "Remove line from left"): both delete that left line.
+func contextDeleteLeftDuplicatesApplyRightToLeft(dr DiffRow) bool {
+	return dr.LeftTag == LineRemoved && dr.RightTag == LinePadding
+}
+
+// contextDeleteRightDuplicatesApplyLeftToRight is true when "Delete line from right file" would do the
+// same as applyLeftToRight on this row (label "Remove line from right").
+func contextDeleteRightDuplicatesApplyLeftToRight(dr DiffRow) bool {
+	return dr.LeftTag == LinePadding && dr.RightTag == LineAdded
+}
+
 // applyRightToLeftMenuLabel describes what applyRightToLeftAtRow does on this row.
 func applyRightToLeftMenuLabel(dr DiffRow) string {
 	switch {
