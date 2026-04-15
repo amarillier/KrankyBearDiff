@@ -37,6 +37,16 @@ func showPreferences(a fyne.App, v *diffView) {
 	wsNote := widget.NewLabel("When off, tabs are shown as four spaces for column alignment. When on, each real space and tab in the file is shown as those symbols so spacing differences are obvious.")
 	wsNote.Wrapping = fyne.TextWrapWord
 
+	syncScroll := widget.NewCheck("Sync scroll (keep left and right panes at the same vertical offset when scrolling)", nil)
+	syncScroll.Checked = a.Preferences().BoolWithFallback(prefSyncScroll, false)
+	syncScrollNote := widget.NewLabel("Matches the main toolbar sync-scroll control; both are saved here when you click Save.")
+	syncScrollNote.Wrapping = fyne.TextWrapWord
+
+	rememberWin := widget.NewCheck("Remember main window size between launches", nil)
+	rememberWin.Checked = a.Preferences().BoolWithFallback(prefRememberWindowSize, false)
+	rememberWinNote := widget.NewLabel("When enabled, the window size is stored when you quit the app (menu Quit, tray Quit, or closing the main window). When disabled, the app opens at the default size.")
+	rememberWinNote.Wrapping = fyne.TextWrapWord
+
 	clearLeft := widget.NewButton("Clear left recent files", func() {
 		dialog.ShowConfirm("Clear recent files", "Remove all saved paths for the left pane?", func(ok bool) {
 			if !ok {
@@ -78,6 +88,12 @@ func showPreferences(a fyne.App, v *diffView) {
 		lineNumsNote,
 		showWS,
 		wsNote,
+		syncScroll,
+		syncScrollNote,
+		widget.NewSeparator(),
+		widget.NewLabelWithStyle("Window", fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
+		rememberWin,
+		rememberWinNote,
 		widget.NewSeparator(),
 		widget.NewLabelWithStyle("Recent files", fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
 		recentsIntro,
@@ -101,10 +117,20 @@ func showPreferences(a fyne.App, v *diffView) {
 		a.Preferences().SetBool(prefShowLineNumbers, v.showLineNumbers)
 		v.showWhitespace = showWS.Checked
 		a.Preferences().SetBool(prefShowWhitespace, v.showWhitespace)
+		v.syncScrollOn = syncScroll.Checked
+		a.Preferences().SetBool(prefSyncScroll, v.syncScrollOn)
+		if v.syncScrollOn && v.leftList != nil && v.rightList != nil {
+			v.syncScrollPrevL = v.leftList.GetScrollOffset()
+			v.syncScrollPrevR = v.rightList.GetScrollOffset()
+		}
+		a.Preferences().SetBool(prefRememberWindowSize, rememberWin.Checked)
+		if rememberWin.Checked && v.win != nil {
+			saveMainWindowGeometryIfEnabled(a, v.win)
+		}
 		v.refreshDiffLists()
 		v.refreshMainToolbar()
 		v.refreshMainMenu()
 	}, parent)
-	d.Resize(fyne.NewSize(520, 500))
+	d.Resize(fyne.NewSize(520, 620))
 	d.Show()
 }

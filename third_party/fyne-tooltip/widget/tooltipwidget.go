@@ -122,7 +122,15 @@ func (t *toolTipContext) setPendingToolTip(wid fyne.CanvasObject, toolTipText st
 }
 
 func (t *toolTipContext) showToolTip(wid fyne.CanvasObject, toolTipText string) {
+	if wid == nil {
+		return
+	}
 	canvas := fyne.CurrentApp().Driver().CanvasForObject(wid)
+	if canvas == nil {
+		// Widget may have been removed from the tree during the hover delay (close window,
+		// replace content, overlay dismissed). Skip tooltip rather than logging an error.
+		return
+	}
 	t.toolTipHandle = internal.ShowToolTipAtMousePosition(canvas, t.absoluteMousePos, toolTipText)
 }
 

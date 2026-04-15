@@ -36,7 +36,7 @@ OPENING FILES
 • File → Open Left File… / Open Right File… / Open Recent (left or right lists)
 • File → Save Left File / Save Right File / Save Both Files — write the in-memory buffer back to the
   path shown above each pane (only enabled when that side has unsaved edits and a path).
-• File → Preferences… — theme, line numbers & whitespace, and clearing recent-file lists (applied when you click Save)
+• File → Preferences… — theme, line numbers, whitespace, sync scroll, optional remembered window size, and clearing recent-file lists (applied when you click Save)
 • Browse… in each pane’s toolbar
 • Drag and drop a file onto the left or right pane (drop near the
   pane you want to load; if the pointer is between panes, the drop
@@ -64,7 +64,8 @@ NAVIGATION
   icons (and the per-pane icons below) for short descriptions (tooltips via fyne-tooltip on the main window;
   a patched vendored copy avoids spurious errors when dialogs or other overlays are on screen).
 - Per-pane toolbar: double-arrow icons jump to the start or end of the diff; single arrows jump to the
-  previous or next changed block (wraps at the ends). The clock/history icon opens recent files for
+  previous or next changed block (wraps at the ends). The refresh icon reloads the current file from disk
+  (asks before discarding unsaved edits). The clock/history icon opens recent files for
   that pane (same entries as File → Open Recent → Left file or Right file). Browse… opens the file picker.
   Below that: a wide Find field (press Enter for next match), “.*” for regex (Go regexp), “Aa” for match case,
   and skip-previous / skip-next icons to search only that pane’s file (wraps). A match selects the aligned

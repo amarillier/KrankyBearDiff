@@ -43,6 +43,21 @@ func showWhitespaceMenuItem(v *diffView) *fyne.MenuItem {
 	return it
 }
 
+func syncScrollMenuItem(v *diffView) *fyne.MenuItem {
+	it := fyne.NewMenuItem("Sync scroll", func() {
+		v.syncScrollOn = !v.syncScrollOn
+		if v.syncScrollOn && v.leftList != nil && v.rightList != nil {
+			v.syncScrollPrevL = v.leftList.GetScrollOffset()
+			v.syncScrollPrevR = v.rightList.GetScrollOffset()
+		}
+		v.app.Preferences().SetBool(prefSyncScroll, v.syncScrollOn)
+		v.refreshMainToolbar()
+		v.refreshMainMenu()
+	})
+	it.Checked = v.syncScrollOn
+	return it
+}
+
 func bringAllAppWindowsToFront(a fyne.App, mainW fyne.Window) {
 	for _, win := range a.Driver().AllWindows() {
 		if win == nil {
@@ -107,7 +122,7 @@ func (v *diffView) buildMainMenu() *fyne.MainMenu {
 		fyne.NewMenuItemSeparator(),
 		fyne.NewMenuItem("Preferences…", func() { showPreferences(v.app, v) }),
 		fyne.NewMenuItemSeparator(),
-		fyne.NewMenuItem("Quit", func() { quitFromMainWindow(v.app) }),
+		fyne.NewMenuItem("Quit", func() { quitFromMainWindow(v.app, v.win) }),
 	)
 
 	copyAligned := fyne.NewMenuItem("Copy aligned row", func() { v.copySelectedRowToClipboard() })
@@ -156,6 +171,7 @@ func (v *diffView) buildMainMenu() *fyne.MainMenu {
 		fyne.NewMenuItemSeparator(),
 		lineNumsMenuItem(v),
 		showWhitespaceMenuItem(v),
+		syncScrollMenuItem(v),
 		fyne.NewMenuItemSeparator(),
 		fyne.NewMenuItem("Light Theme", func() {
 			setLightTheme(v.app)
@@ -215,7 +231,7 @@ func (v *diffView) buildTrayMenu() *fyne.Menu {
 		fyne.NewMenuItem("About", func() { showAbout(v.app) }),
 		fyne.NewMenuItem("Check for Updates…", func() { checkForUpdates(v.app) }),
 		fyne.NewMenuItemSeparator(),
-		fyne.NewMenuItem("Quit", func() { quitFromMainWindow(v.app) }),
+		fyne.NewMenuItem("Quit", func() { quitFromMainWindow(v.app, v.win) }),
 	)
 }
 

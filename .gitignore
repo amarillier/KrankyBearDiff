@@ -23,7 +23,7 @@ git.sh
 git.txt
 
 # Update checker data
-latestcheck.json
+latestcheck*.json
 
 ## Build artifacts
 bin/.DS_Store

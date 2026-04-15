@@ -15,6 +15,24 @@ import (
 
 const githubReleasesAPI = "https://api.github.com/repos/amarillier/KrankyBearDiff/releases/latest"
 
+// go-update-checker's cache stores only tag/name, not owner/repo; use a repo-specific
+// filename so a generic latestcheck.json is never confused with another app's release.
+const updateCheckStateFileName = "latestcheck-KrankyBearDiff.json"
+
+// releaseTitleLine formats GitHub tag plus optional release title for dialogs.
+func releaseTitleLine(tag, title string) string {
+	tag = strings.TrimSpace(tag)
+	title = strings.TrimSpace(title)
+	switch {
+	case tag == "":
+		return ""
+	case title == "":
+		return tag
+	default:
+		return fmt.Sprintf("%s (%s)", tag, title)
+	}
+}
+
 type ghRelease struct {
 	TagName string `json:"tag_name"`
 	Name    string `json:"name"`
@@ -145,12 +163,12 @@ func checkForUpdates(a fyne.App) {
 			msg = fmt.Sprintf("Could not determine the latest release tag.\n\nYour version: %s", local)
 		case versionOrder(local, remote) < 0:
 			available = true
-			msg = fmt.Sprintf("A newer release is available.\n\nYou have: %s\nLatest: %s (%s).", local, rel.TagName, rel.Name)
+			msg = fmt.Sprintf("A newer release is available.\n\nYou have: %s\nLatest: %s.", local, releaseTitleLine(rel.TagName, rel.Name))
 		case versionOrder(local, remote) > 0:
 			localAhead = true
-			msg = fmt.Sprintf("Your build is newer than the latest release on GitHub\n(development or unpublished build).\n\nYour version: %s\nLatest release: %s (%s)", local, rel.TagName, rel.Name)
+			msg = fmt.Sprintf("Your build is newer than the latest release on GitHub\n(development or unpublished build).\n\nYour version: %s\nLatest release: %s", local, releaseTitleLine(rel.TagName, rel.Name))
 		default:
-			msg = fmt.Sprintf("You are up to date.\n\nCurrent version: %s\nLatest release: %s (%s)", local, rel.TagName, rel.Name)
+			msg = fmt.Sprintf("You are up to date.\n\nCurrent version: %s\nLatest release: %s", local, releaseTitleLine(rel.TagName, rel.Name))
 		}
 
 		fyne.Do(func() { showUpdateDialog(a, msg, available, localAhead) })
@@ -185,7 +203,7 @@ func maybeCheckUpdatesOnLaunch(a fyne.App) {
 	remoteTag := strings.TrimSpace(uc.RemoteTag)
 	name := strings.TrimSpace(uc.RemoteName)
 	fyne.Do(func() {
-		msg := fmt.Sprintf("A newer release is available.\n\nYou have: %s\nLatest: %s (%s).", appVersion, remoteTag, name)
+		msg := fmt.Sprintf("A newer release is available.\n\nYou have: %s\nLatest: %s.", appVersion, releaseTitleLine(remoteTag, name))
 		if remoteTag == "" {
 			msg = fmt.Sprintf("A newer release is available.\n\nYou have: %s", appVersion)
 		}

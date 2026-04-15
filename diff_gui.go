@@ -119,6 +119,8 @@ type diffView struct {
 	paneSearchEntry [2]*widget.Entry
 	paneSearchRegex [2]*ttwidget.Check
 	paneSearchCase  [2]*ttwidget.Check
+
+	btnReloadPane [2]*ttwidget.Button
 }
 
 func (v *diffView) showFlyoutMenu(menu *fyne.Menu, pos fyne.Position) {
@@ -343,6 +345,17 @@ func (v *diffView) refreshMainToolbar() {
 		}
 		v.btnSyncScroll.Refresh()
 		v.refreshUndoRedoButtons()
+		for i := 0; i < 2; i++ {
+			if v.btnReloadPane[i] == nil {
+				continue
+			}
+			if (i == 0 && v.leftP != "") || (i == 1 && v.rightP != "") {
+				v.btnReloadPane[i].Enable()
+			} else {
+				v.btnReloadPane[i].Disable()
+			}
+			v.btnReloadPane[i].Refresh()
+		}
 	})
 }
 
@@ -383,7 +396,9 @@ func (v *diffView) buildMainChromeToolbar() fyne.CanvasObject {
 			v.syncScrollPrevL = v.leftList.GetScrollOffset()
 			v.syncScrollPrevR = v.rightList.GetScrollOffset()
 		}
+		v.app.Preferences().SetBool(prefSyncScroll, v.syncScrollOn)
 		v.refreshMainToolbar()
+		v.refreshMainMenu()
 	})
 	v.btnSyncScroll.SetToolTip("Sync scroll: keep left and right panes at the same vertical offset when scrolling")
 	v.btnLineNums = ttwidget.NewButtonWithIcon("", theme.ListIcon(), func() {
@@ -684,6 +699,43 @@ func (v *diffView) completeLoad(side int, path, text string) {
 	})
 }
 
+// reloadSideAttempt re-reads the file for this pane from disk. If there are unsaved edits, asks before discarding them.
+func (v *diffView) reloadSideAttempt(side int) {
+	if v.win == nil {
+		return
+	}
+	var path string
+	var dirty bool
+	if side == 0 {
+		path, dirty = v.leftP, v.leftDirty
+	} else {
+		path, dirty = v.rightP, v.rightDirty
+	}
+	if path == "" {
+		return
+	}
+	doReload := func() {
+		b, err := os.ReadFile(path)
+		if err != nil {
+			dialog.ShowError(fmt.Errorf("reload file: %w", err), v.win)
+			return
+		}
+		v.completeLoad(side, path, string(b))
+	}
+	if dirty {
+		dialog.ShowConfirm("Reload file",
+			"This side has unsaved changes. Reload from disk and discard them?",
+			func(ok bool) {
+				if ok {
+					doReload()
+				}
+			},
+			v.win)
+		return
+	}
+	doReload()
+}
+
 func (v *diffView) loadPathFromRecent(side int, path string) {
 	b, err := os.ReadFile(path)
 	if err != nil {
@@ -797,11 +849,15 @@ func (v *diffView) buildToolbar(side int) *fyne.Container {
 	})
 	recent.SetToolTip("Open a recently used file on this side")
 	recent.Importance = widget.LowImportance
+	reload := ttwidget.NewButtonWithIcon("", theme.ViewRefreshIcon(), func() { v.reloadSideAttempt(side) })
+	reload.SetToolTip("Reload this file from disk (re-reads from disk; asks before discarding unsaved edits)")
+	reload.Importance = widget.LowImportance
+	v.btnReloadPane[side] = reload
 	open := ttwidget.NewButton("Browse…", func() { v.openFileDialog(side) })
 	open.SetToolTip("Choose a file from disk for this side")
 	open.Importance = widget.MediumImportance
 
-	top := container.NewHBox(first, prev, next, last, widget.NewSeparator(), recent, widget.NewSeparator(), open)
+	top := container.NewHBox(first, prev, next, last, widget.NewSeparator(), reload, recent, widget.NewSeparator(), open)
 
 	entry := widget.NewEntry()
 	entry.SetPlaceHolder("Find…")
@@ -949,13 +1005,14 @@ func runApp() {
 		app:             a,
 		showLineNumbers: a.Preferences().BoolWithFallback(prefShowLineNumbers, false),
 		showWhitespace:  a.Preferences().BoolWithFallback(prefShowWhitespace, false),
+		syncScrollOn:    a.Preferences().BoolWithFallback(prefSyncScroll, false),
 	}
 	w := a.NewWindow(appName)
 	v.win = w
 	w.SetIcon(resourceKrankyBearHackerPng)
 	w.SetContent(fynetooltip.AddWindowToolTipLayer(container.NewPadded(v.buildUI()), w.Canvas()))
 	v.registerMainCanvasShortcuts(w.Canvas())
-	w.Resize(fyne.NewSize(1100, 800))
+	w.Resize(mainWindowLaunchSize(a))
 	w.SetOnDropped(v.dropTarget)
 
 	// Closing the main window must exit the app and tear down the system tray
@@ -967,7 +1024,7 @@ func runApp() {
 			v.flyoutPop = nil
 		}
 		fynetooltip.DestroyWindowToolTipLayer(w.Canvas())
-		quitFromMainWindow(a)
+		quitFromMainWindow(a, w)
 	})
 
 	w.Show()

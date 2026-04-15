@@ -39,7 +39,7 @@ func sanitizeFynePreferencesBeforeLoad(uniqueID string) {
 // fyneUpdateCheckStatePath returns the path for go-update-checker's cache file
 // (alongside Fyne's preferences.json for this app ID).
 func fyneUpdateCheckStatePath(uniqueID string) string {
-	return filepath.Join(filepath.Dir(fynePrefsFilePath(uniqueID)), "latestcheck.json")
+	return filepath.Join(filepath.Dir(fynePrefsFilePath(uniqueID)), updateCheckStateFileName)
 }
 
 func sanitizeFynePrefsFile(path string) {

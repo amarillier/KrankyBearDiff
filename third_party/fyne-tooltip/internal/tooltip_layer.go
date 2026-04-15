@@ -1,7 +1,6 @@
 package internal
 
 import (
-	"errors"
 	"time"
 
 	"fyne.io/fyne/v2"
@@ -50,7 +49,7 @@ func DestroyToolTipLayerForCanvas(canvas fyne.Canvas) {
 func NewPopUpToolTipLayer(popUp *widget.PopUp) *ToolTipLayer {
 	ct := toolTipLayers[popUp.Canvas]
 	if ct == nil {
-		fyne.LogError("", errors.New("no tool tip layer created for parent canvas"))
+		// Main window has no tooltip layer yet, or canvas was torn down — skip overlay layer quietly.
 		return nil
 	}
 	t := &ToolTipLayer{}
@@ -70,14 +69,14 @@ func DestroyToolTipLayerForPopup(popUp *widget.PopUp) {
 
 func ShowToolTipAtMousePosition(canvas fyne.Canvas, pos fyne.Position, text string) *ToolTipHandle {
 	if canvas == nil {
-		fyne.LogError("", errors.New("no canvas associated with tool tip widget"))
+		// Caller should avoid this; if it happens, skip quietly (no spurious log on teardown races).
 		return nil
 	}
 
 	lastToolTipShownUnixMilli = time.Now().UnixMilli()
 	overlay := canvas.Overlays().Top()
 	handle := &ToolTipHandle{canvas: canvas, overlay: overlay}
-	tl := findToolTipLayer(handle, true)
+	tl := findToolTipLayer(handle)
 	if tl == nil {
 		return nil
 	}
@@ -101,7 +100,7 @@ func HideToolTip(handle *ToolTipHandle) {
 	if handle == nil {
 		return
 	}
-	tl := findToolTipLayer(handle, false)
+	tl := findToolTipLayer(handle)
 	if tl == nil {
 		return
 	}
@@ -109,12 +108,9 @@ func HideToolTip(handle *ToolTipHandle) {
 	tl.Container.Refresh()
 }
 
-func findToolTipLayer(handle *ToolTipHandle, logErr bool) *ToolTipLayer {
+func findToolTipLayer(handle *ToolTipHandle) *ToolTipLayer {
 	tl := toolTipLayers[handle.canvas]
 	if tl == nil {
-		if logErr {
-			fyne.LogError("", errors.New("no tool tip layer created for window canvas"))
-		}
 		return nil
 	}
 	if handle.overlay != nil {

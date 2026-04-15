@@ -3,7 +3,14 @@ Release notes
 0.2.NEXT
 - Ideas under consideration: export unified patch; other small workflow tweaks.
 
-Tuesday, April 15, 2026
+Wednesday, April 15, 2026
+0.2.2
+- Per-pane file reload: toolbar control (refresh icon) re-reads that side’s file from disk; disabled until a path is loaded; confirms before discarding unsaved edits on that side.
+- Preferences — Sync scroll: matches the main toolbar and View → Sync scroll; the on/off state is stored and restored on launch like line numbers and whitespace.
+- Preferences — Window: optional “Remember main window size between launches.” When enabled, the last canvas size is saved when you quit (menu, tray, or closing the main window) and restored on the next run; when disabled, the app opens at the default size (1100×800).
+- Tooltips: further hardening of vendored fyne-tooltip (third_party) — quiet handling when the hover target has no canvas yet, no spurious logs when the tooltip layer is missing during teardown, and safer popup overlay setup.
+
+Tuesday, April 14, 2026
 0.2.1
 - Update check: optional background check on launch (about once per 7 days) using vendored github.com/amarillier/go-update-checker; Help → Check for Updates unchanged.
 

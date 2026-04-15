@@ -18,7 +18,9 @@ func hideAuxiliaryWindows() {
 
 // quitFromMainWindow performs a full application exit: auxiliary windows,
 // GLFW windows, and the system tray (via driver Quit) are torn down.
-func quitFromMainWindow(a fyne.App) {
+// mainWin is the primary window; when non-nil, its size may be persisted (see preferences).
+func quitFromMainWindow(a fyne.App, mainWin fyne.Window) {
+	saveMainWindowGeometryIfEnabled(a, mainWin)
 	hideAuxiliaryWindows()
 	a.Quit()
 }

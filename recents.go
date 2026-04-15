@@ -8,11 +8,18 @@ import (
 )
 
 const (
-	prefRecentLeft      = "recentPathsLeft"
-	prefRecentRight     = "recentPathsRight"
-	prefShowLineNumbers = "showLineNumbers"
-	prefShowWhitespace  = "showWhitespace"
-	maxRecentFiles      = 10
+	prefRecentLeft         = "recentPathsLeft"
+	prefRecentRight        = "recentPathsRight"
+	prefShowLineNumbers    = "showLineNumbers"
+	prefShowWhitespace     = "showWhitespace"
+	prefSyncScroll         = "syncScroll"
+	prefRememberWindowSize = "rememberWindowSize"
+	prefWindowWidth        = "windowWidth"
+	prefWindowHeight       = "windowHeight"
+	maxRecentFiles         = 10
+
+	mainWindowDefaultWidth  = float32(1100)
+	mainWindowDefaultHeight = float32(800)
 )
 
 func recentKey(side int) string {
@@ -99,4 +106,33 @@ func recentMenuLabel(path string) string {
 		return path
 	}
 	return "…" + path[len(path)-(max-1):]
+}
+
+// mainWindowLaunchSize returns the initial main window size from preferences or defaults.
+func mainWindowLaunchSize(a fyne.App) fyne.Size {
+	if !a.Preferences().BoolWithFallback(prefRememberWindowSize, false) {
+		return fyne.NewSize(mainWindowDefaultWidth, mainWindowDefaultHeight)
+	}
+	sw := float32(a.Preferences().FloatWithFallback(prefWindowWidth, float64(mainWindowDefaultWidth)))
+	sh := float32(a.Preferences().FloatWithFallback(prefWindowHeight, float64(mainWindowDefaultHeight)))
+	const minW, minH float32 = 400, 300
+	const maxW, maxH float32 = 8000, 8000
+	if sw < minW || sh < minH || sw > maxW || sh > maxH {
+		return fyne.NewSize(mainWindowDefaultWidth, mainWindowDefaultHeight)
+	}
+	return fyne.NewSize(sw, sh)
+}
+
+// saveMainWindowGeometryIfEnabled persists the current window size when the user opted in.
+func saveMainWindowGeometryIfEnabled(a fyne.App, w fyne.Window) {
+	if w == nil || !a.Preferences().BoolWithFallback(prefRememberWindowSize, false) {
+		return
+	}
+	sz := w.Canvas().Size()
+	const minW, minH float32 = 400, 300
+	if sz.Width < minW || sz.Height < minH {
+		return
+	}
+	a.Preferences().SetFloat(prefWindowWidth, float64(sz.Width))
+	a.Preferences().SetFloat(prefWindowHeight, float64(sz.Height))
 }

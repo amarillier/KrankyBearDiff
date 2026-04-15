@@ -33,6 +33,9 @@ func DestroyWindowToolTipLayer(canvas fyne.Canvas) {
 // A pop up that will be shown again should not have DestroyPopUpToolTipLayer called.
 func AddPopUpToolTipLayer(p *widget.PopUp) {
 	l := internal.NewPopUpToolTipLayer(p)
+	if l == nil {
+		return
+	}
 	p.Content = container.NewStack(p.Content, &l.Container)
 }
 
